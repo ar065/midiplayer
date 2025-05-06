@@ -6,6 +6,8 @@
         "midi-player.h": "c",
         "midi.h": "c",
         "midi-utils.h": "c",
-        "stdbool.h": "c"
+        "stdbool.h": "c",
+        "unistd.h": "c",
+        "cstdint": "c"
     }
 }

@@ -3,7 +3,7 @@ add_rules("mode.debug", "mode.release")
 set_toolchains("gcc")
 
 -- Set C language standard
-set_languages("c99")
+set_languages("c++17")
 
 -- Add release mode flags
 if is_mode("release") then
