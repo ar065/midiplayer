@@ -5,7 +5,7 @@
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        printf("Usage: ./midi_player <midi_file>\n", argv[0]);
+        printf("mplayer: Usage: ./midi_player <midi_file>\n", argv[0]);
         return 1;
     }
 
@@ -16,14 +16,14 @@ int main(int argc, char* argv[]) {
 
     TrackData* tracks = load_midi_file(filename, &time_div, &track_count);
     if (!tracks) {
-        printf("Failed to load MIDI file\n");
+        printf("mplayer: Failed to load MIDI file\n");
         return 1;
     }
 
     SendDirectDataFunc SendDirectData = NULL;
     void* midi_lib = initialize_midi(&SendDirectData);
     if (!midi_lib) {
-        printf("Failed to initialize MIDI library\n");
+        printf("mplayer: Failed to initialize MIDI library\n");
         return 1;
     }
 

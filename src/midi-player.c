@@ -53,7 +53,7 @@ void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirect
                                 uint8_t velocity = (message >> 16) & 0xFF;
                                 note_on_count++;
 
-                                if (velocity >= 5) {
+                                if (velocity > 1) {
                                     SendDirectData(message);
                                 }
                             } else {
@@ -65,7 +65,7 @@ void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirect
                             process_meta_event(&tracks[i], &multiplier, &bpm, time_div);
                         }
                         else if (msg_type == 0xF0) {
-                            printf("TODO: Handle SysEx\n");
+                            printf("mplayer: TODO: Handle SysEx\n");
                         }
 
                         if (tracks[i].data != NULL) {

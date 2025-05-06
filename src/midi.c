@@ -48,7 +48,7 @@ TrackData* load_midi_file(const char* filename, uint16_t* time_div, int* track_c
         return NULL;
     }
 
-    printf("%d tracks\n", num_tracks);
+    printf("mplayer: %d tracks\n", num_tracks);
 
     tracks = malloc(num_tracks * sizeof(TrackData));
     if (!tracks) {
@@ -117,7 +117,7 @@ TrackData* load_midi_file(const char* filename, uint16_t* time_div, int* track_c
     double duration_seconds = (double)(end_time - start_time) / CLOCKS_PER_SEC;
     long duration_milliseconds = (long)(duration_seconds * 1000);
 
-    printf("Parsed in %ldms.\n", duration_milliseconds);
+    printf("mplayer: Parsed in %ldms.\n", duration_milliseconds);
 
     fclose(file);
     return tracks;
