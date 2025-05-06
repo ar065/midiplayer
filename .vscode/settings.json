@@ -8,6 +8,7 @@
         "midi-utils.h": "c",
         "stdbool.h": "c",
         "unistd.h": "c",
-        "cstdint": "c"
+        "cstdint": "c",
+        "kdmapi.h": "c"
     }
 }

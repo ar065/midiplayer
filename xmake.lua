@@ -13,5 +13,14 @@ end
 target("midi_player")
     set_kind("binary")
     add_files("src/*.c")
-    add_includedirs("src")
+    add_includedirs("include")
     add_links("asound")
+
+    -- copy lib files
+    after_build(function (target)
+        local libdir = path.join(os.projectdir(), "lib")
+        local targetdir = target:targetdir()
+        for _, file in ipairs(os.files(path.join(libdir, "*.so"))) do
+            os.cp(file, targetdir)
+        end
+    end)
