@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirectDataFunc SendDirectData);
+void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirectDataFunc SendDirectData, int min_velocity);
 
 #ifdef __cplusplus
 }

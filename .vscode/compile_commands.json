@@ -1,31 +1,31 @@
 [
 {
-  "directory": "/home/ar06/Documents/midiplayer",
+  "directory": "/home/ar06/Documents/GitHub/midiplayer",
   "arguments": ["/usr/bin/gcc", "-c", "-m64", "-fvisibility=hidden", "-Isrc", "-Ibuild/.gens/midi_player/linux/x86_64/release/platform/windows/idl", "-O3", "-march=native", "-funroll-loops", "-fomit-frame-pointer", "-DNDEBUG", "-o", "build/.objs/midi_player/linux/x86_64/release/src/midi-player.c.o", "src/midi-player.c"],
   "file": "src/midi-player.c"
 },
 {
-  "directory": "/home/ar06/Documents/midiplayer",
+  "directory": "/home/ar06/Documents/GitHub/midiplayer",
   "arguments": ["/usr/bin/gcc", "-c", "-m64", "-fvisibility=hidden", "-Isrc", "-Ibuild/.gens/midi_player/linux/x86_64/release/platform/windows/idl", "-O3", "-march=native", "-funroll-loops", "-fomit-frame-pointer", "-DNDEBUG", "-o", "build/.objs/midi_player/linux/x86_64/release/src/midi.c.o", "src/midi.c"],
   "file": "src/midi.c"
 },
 {
-  "directory": "/home/ar06/Documents/midiplayer",
+  "directory": "/home/ar06/Documents/GitHub/midiplayer",
   "arguments": ["/usr/bin/gcc", "-c", "-m64", "-fvisibility=hidden", "-Isrc", "-Ibuild/.gens/midi_player/linux/x86_64/release/platform/windows/idl", "-O3", "-march=native", "-funroll-loops", "-fomit-frame-pointer", "-DNDEBUG", "-o", "build/.objs/midi_player/linux/x86_64/release/src/main.c.o", "src/main.c"],
   "file": "src/main.c"
 },
 {
-  "directory": "/home/ar06/Documents/midiplayer",
+  "directory": "/home/ar06/Documents/GitHub/midiplayer",
   "arguments": ["/usr/bin/gcc", "-c", "-m64", "-fvisibility=hidden", "-Isrc", "-Ibuild/.gens/midi_player/linux/x86_64/release/platform/windows/idl", "-O3", "-march=native", "-funroll-loops", "-fomit-frame-pointer", "-DNDEBUG", "-o", "build/.objs/midi_player/linux/x86_64/release/src/midi-utils.c.o", "src/midi-utils.c"],
   "file": "src/midi-utils.c"
 },
 {
-  "directory": "/home/ar06/Documents/midiplayer",
+  "directory": "/home/ar06/Documents/GitHub/midiplayer",
   "arguments": ["/usr/bin/gcc", "-c", "-m64", "-fvisibility=hidden", "-Isrc", "-Ibuild/.gens/midi_player/linux/x86_64/release/platform/windows/idl", "-O3", "-march=native", "-funroll-loops", "-fomit-frame-pointer", "-DNDEBUG", "-o", "build/.objs/midi_player/linux/x86_64/release/src/track-data.c.o", "src/track-data.c"],
   "file": "src/track-data.c"
 },
 {
-  "directory": "/home/ar06/Documents/midiplayer",
+  "directory": "/home/ar06/Documents/GitHub/midiplayer",
   "arguments": ["/usr/bin/gcc", "-c", "-m64", "-fvisibility=hidden", "-Isrc", "-Ibuild/.gens/midi_player/linux/x86_64/release/platform/windows/idl", "-O3", "-march=native", "-funroll-loops", "-fomit-frame-pointer", "-DNDEBUG", "-o", "build/.objs/midi_player/linux/x86_64/release/src/kdmapi.c.o", "src/kdmapi.c"],
   "file": "src/kdmapi.c"
 }]

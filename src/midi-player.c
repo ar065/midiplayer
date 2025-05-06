@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <time.h>
 
-void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirectDataFunc SendDirectData) {
+void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirectDataFunc SendDirectData, int min_velocity) {
     uint64_t tick = 0;
     double multiplier = 0;
     uint64_t bpm = 500000; // Default tempo: 120 BPM
@@ -53,7 +53,7 @@ void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirect
                                 uint8_t velocity = (message >> 16) & 0xFF;
                                 note_on_count++;
 
-                                if (velocity > 1) {
+                                if (velocity > min_velocity) {
                                     SendDirectData(message);
                                 }
                             } else {
