@@ -27,9 +27,6 @@ typedef struct {
 
 void* log_notes_per_second(void* arg);
 
-// MIDI initialization
-void* initialize_midi(SendDirectDataFunc* SendDirectData);
-
 #ifdef __cplusplus
 }
 #endif

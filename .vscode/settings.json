@@ -1,6 +1,11 @@
 {
     "files.associations": {
         "track-data.h": "c",
-        "time.h": "c"
+        "time.h": "c",
+        "pthread.h": "c",
+        "midi-player.h": "c",
+        "midi.h": "c",
+        "midi-utils.h": "c",
+        "stdbool.h": "c"
     }
 }

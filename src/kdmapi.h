@@ -14,7 +14,7 @@ extern "C" {
 #endif
 
 // Define function pointer types for OmniMIDI/KDMAPI functions
-typedef bool (*SendDirectDataFunc)(unsigned int);
+typedef void (*SendDirectDataFunc)(uint32_t);
 
 // Initializes the MIDI library (OmniMIDI on Windows, libOmniMIDI.so on Linux)
 // On success, returns a handle to the loaded library and sets SendDirectData

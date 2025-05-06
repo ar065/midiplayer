@@ -1,6 +1,7 @@
 #include "midi.h"
 #include <stdio.h>
 #include <time.h>
+#include <string.h>
 
 TrackData* load_midi_file(const char* filename, uint16_t* time_div, int* track_count) {
     TrackData* tracks = NULL;

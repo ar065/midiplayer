@@ -8,8 +8,6 @@
 extern "C" {
 #endif
 
-// Function declarations
-TrackData* load_midi_file(const char* filename, uint16_t* time_div, int* track_count);
 void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirectDataFunc SendDirectData);
 
 #ifdef __cplusplus
