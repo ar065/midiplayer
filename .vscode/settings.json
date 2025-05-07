@@ -10,6 +10,7 @@
         "unistd.h": "c",
         "cstdint": "c",
         "kdmapi.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "*.buffered": "c"
     }
 }
