@@ -1,0 +1,341 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <time.h>
+#include <string.h>
+#include <unistd.h>       // sleep
+#include <xmmintrin.h>    // _mm_pause
+
+#include "midi-player.h"
+#include "midi-utils.h"   // getTime100ns, delayExecution100Ns
+
+#define MAX_BUFFERED_EVENTS       (1UL << 28)  // 268,435,456
+#define LOG_INTERVAL_SEC          1
+#define BUSY_WAIT_THRESHOLD_100NS 50000LL       // ~5ms
+
+typedef struct {
+    int64_t  due_time_100ns;
+    uint32_t message;
+} MidiEvent;
+
+// ——— Global state ———
+// was: static MidiEvent event_buffer[MAX_BUFFERED_EVENTS];
+static MidiEvent*        event_buffer = NULL;
+static _Atomic size_t     buf_head    = 0;
+static _Atomic size_t     buf_tail    = 0;
+static _Atomic size_t     buf_count   = 0;
+
+static volatile bool      done_parsing  = false;
+static volatile bool      done_dispatch = false;
+static volatile uint64_t  note_on_cnt   = 0;
+static volatile uint64_t  event_count   = 0;
+static volatile uint64_t  parsed_event_count   = 0;
+
+// ——— Logger thread ———
+void* logger_thread_fn(void* arg) {
+    (void)arg;
+    while (!done_dispatch) {
+        uint64_t start_nps = note_on_cnt;
+        uint64_t start_evs = event_count;
+        uint64_t start_pes = parsed_event_count;
+        sleep(LOG_INTERVAL_SEC);
+        uint64_t end_nps = note_on_cnt;
+        uint64_t end_evs = event_count;
+        uint64_t end_pes = parsed_event_count;
+        // printf("mplayer: Notes/sec: %llu\n",
+        //        (unsigned long long)(end_nps - start_nps));
+        printf("mplayer: Notes/sec: %llu | Events/sec: %llu | Parsed/sec: %llu\n",
+            (unsigned long long)(end_nps - start_nps),
+            (unsigned long long)(end_evs - start_evs),
+            (unsigned long long)(end_pes - start_pes));
+    }
+    return NULL;
+}
+
+// ——— Buffer primitives ———
+static inline bool buffer_is_full(void) {
+    return atomic_load_explicit(&buf_count, memory_order_acquire)
+           == MAX_BUFFERED_EVENTS;
+}
+
+static inline bool buffer_is_empty(void) {
+    return atomic_load_explicit(&buf_count, memory_order_acquire) == 0;
+}
+
+static inline void enqueue_event(const MidiEvent *ev) {
+    size_t tail = atomic_load_explicit(&buf_tail, memory_order_relaxed);
+    event_buffer[tail] = *ev;
+    atomic_store_explicit(&buf_tail,
+                          (tail + 1) % MAX_BUFFERED_EVENTS,
+                          memory_order_relaxed);
+    atomic_fetch_add_explicit(&buf_count, 1, memory_order_release);
+}
+
+static inline bool try_dequeue_event(MidiEvent *ev) {
+    if (buffer_is_empty()) return false;
+    size_t head = atomic_load_explicit(&buf_head, memory_order_relaxed);
+    *ev = event_buffer[head];
+    atomic_store_explicit(&buf_head,
+                          (head + 1) % MAX_BUFFERED_EVENTS,
+                          memory_order_relaxed);
+    atomic_fetch_sub_explicit(&buf_count, 1, memory_order_release);
+    return true;
+}
+
+// ——— Parser thread ———
+struct ParserArgs { TrackData* tracks; int track_count; uint16_t time_div; int min_velocity; };
+void* parser_thread_fn(void* arg) {
+    struct ParserArgs* pa = arg;
+    TrackData* tracks = pa->tracks;
+    uint16_t time_div = pa->time_div;
+
+    uint64_t tick = 0;
+    int64_t last_time = getTime100ns();
+    double multiplier = 500000.0 / time_div * 10.0;
+    uint64_t bpm = 500000;
+
+    bool active = true;
+    while (active) {
+        active = false;
+        uint64_t best_delta = UINT64_MAX;
+        int best = -1;
+        for (int i = 0; i < pa->track_count; i++) {
+            if (!tracks[i].data) continue;
+            active = true;
+            uint64_t d = tracks[i].tick > tick
+                         ? tracks[i].tick - tick
+                         : 0;
+            if (d < best_delta) {
+                best_delta = d;
+                best = i;
+            }
+        }
+        if (!active) break;
+
+        tick += best_delta;
+        last_time += (int64_t)(best_delta * multiplier);
+        TrackData* t = &tracks[best];
+
+        while (t->data && t->tick == tick) {
+            update_command(t);
+            update_message(t);
+            uint32_t msg = t->message;
+            uint8_t st = msg & 0xFF;
+            if (st < 0xF0) {
+                if (st >= 0x90 && st <= 0x9F) {
+                    // note_on_cnt++;
+                    uint8_t vel = (msg >> 16) & 0xFF;
+                    if (vel <= pa->min_velocity) goto SKIP;
+                }
+                MidiEvent ev = { .due_time_100ns = last_time, .message = msg };
+                while (buffer_is_full()) {
+                    // printf("Warning: Buffer full, waiting...\n");
+                    _mm_pause();
+                }
+                enqueue_event(&ev);
+                // event_count++;
+                parsed_event_count++;
+            } else if (st == 0xFF) {
+                process_meta_event(t, &multiplier, &bpm, time_div);
+            }
+        SKIP:
+            if (t->data) update_tick(t);
+        }
+    }
+    done_parsing = true;
+    return NULL;
+}
+
+// ——— Dispatcher thread ———
+struct DispatcherArgs { SendDirectDataFunc SendDirectData; };
+void* dispatcher_thread_fn(void* arg) {
+    struct DispatcherArgs* da = arg;
+    MidiEvent ev;
+
+    // Optionally raise thread priority (requires CAP_SYS_NICE or root)
+    /*
+    struct sched_param param = { .sched_priority = 80 };
+    pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+    */
+
+    while (1) {
+        while (!done_parsing && buffer_is_empty()) _mm_pause();
+        if (done_parsing && buffer_is_empty()) break;
+        if (!try_dequeue_event(&ev)) continue;
+
+        // Timing control: hybrid delay and spin
+        while (1) {
+            int64_t now = getTime100ns();
+            int64_t until = ev.due_time_100ns - now;
+            if (until <= 0) break;
+            else if (until > BUSY_WAIT_THRESHOLD_100NS)
+                delayExecution100Ns(until - BUSY_WAIT_THRESHOLD_100NS);
+            else
+                _mm_pause();
+        }
+
+        // Playback
+        da->SendDirectData(ev.message);
+
+        event_count++;
+        // Accurate Note On counting (playback time)
+        uint8_t status = ev.message & 0xFF;
+        uint8_t velocity = (ev.message >> 16) & 0xFF;
+        if ((status >= 0x90 && status <= 0x9F) && velocity > 0) {
+            note_on_cnt++;
+        }
+    }
+
+    done_dispatch = true;
+    return NULL;
+}
+
+
+// ——— play_midi: setup, threads, teardown ———
+void play_midi(TrackData* tracks, int track_count, uint16_t time_div,
+               SendDirectDataFunc SendDirectData, int min_velocity) {
+    // Allocate the huge ring buffer on the heap
+    event_buffer = malloc(sizeof(MidiEvent) * MAX_BUFFERED_EVENTS);
+    if (!event_buffer) {
+        fprintf(stderr, "Fatal: Failed to allocate event buffer\n");
+        exit(EXIT_FAILURE);
+    }
+
+    pthread_t p, d, l;
+    struct ParserArgs pa = { tracks, track_count, time_div, min_velocity };
+    struct DispatcherArgs da = { SendDirectData };
+
+    pthread_create(&l, NULL, logger_thread_fn, NULL);
+    pthread_detach(l);
+
+    pthread_create(&d, NULL, dispatcher_thread_fn, &da);
+    pthread_create(&p, NULL, parser_thread_fn, &pa);
+
+    pthread_join(p, NULL);
+    pthread_join(d, NULL);
+
+    // Free the buffer when done
+    free(event_buffer);
+    event_buffer = NULL;
+}
+
+// void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirectDataFunc SendDirectData, int min_velocity) {
+//     uint64_t tick = 0;
+//     double multiplier = 0;
+//     uint64_t bpm = 500000; // Default tempo: 120 BPM
+//     uint64_t delta_tick = 0;
+//     uint64_t last_time = 0;
+//     const uint64_t max_drift = 100000;
+//     int64_t delta = 0;
+//     uint64_t old = 0;
+//     int64_t temp = 0;
+
+//     uint64_t note_on_count = 0;
+//     bool is_playing = true;
+
+//     uint64_t now = getTime100ns();
+//     last_time = now;
+
+//     // Setup and start logger thread
+//     pthread_t logger_thread;
+//     LoggerArgs* logger_args = malloc(sizeof(LoggerArgs));
+//     logger_args->is_playing = &is_playing;
+//     logger_args->note_on_count = &note_on_count;
+
+//     pthread_create(&logger_thread, NULL, log_notes_per_second, logger_args);
+
+//     bool has_active_tracks = true;
+
+//     while (true) {
+//         // Check if there are any active tracks
+//         has_active_tracks = false;
+//         int active_track_count = 0;
+//         int* active_tracks = malloc(track_count * sizeof(int));
+
+//         for (int i = 0; i < track_count; i++) {
+//             if (tracks[i].data != NULL) {
+//                 if (tracks[i].tick <= tick) {
+//                     // Process events in this track
+//                     while (tracks[i].data != NULL && tracks[i].tick <= tick) {
+//                         update_command(&tracks[i]);
+//                         update_message(&tracks[i]);
+
+//                         uint32_t message = tracks[i].message;
+//                         uint8_t msg_type = message & 0xFF;
+//                         if (msg_type < 0xF0) {
+//                             // Check if it's a note-on message
+//                             if (msg_type >= 0x90 && msg_type <= 0x9F) {
+//                                 uint8_t velocity = (message >> 16) & 0xFF;
+//                                 note_on_count++;
+
+//                                 if (velocity > min_velocity) {
+//                                     SendDirectData(message);
+//                                 }
+//                             } else {
+//                                 // Pass through all other message types
+//                                 SendDirectData(message);
+//                             }
+//                         }
+//                         else if (msg_type == 0xFF) {
+//                             process_meta_event(&tracks[i], &multiplier, &bpm, time_div);
+//                         }
+//                         else if (msg_type == 0xF0) {
+//                             printf("mplayer: TODO: Handle SysEx\n");
+//                         }
+
+//                         if (tracks[i].data != NULL) {
+//                             update_tick(&tracks[i]);
+//                         }
+//                     }
+//                 }
+
+//                 if (tracks[i].data != NULL) {
+//                     active_tracks[active_track_count++] = i;
+//                     has_active_tracks = true;
+//                 }
+//             }
+//         }
+
+//         if (!has_active_tracks) {
+//             free(active_tracks);
+//             break;
+//         }
+
+//         // Find next tick
+//         delta_tick = UINT64_MAX;
+//         for (int i = 0; i < active_track_count; i++) {
+//             int idx = active_tracks[i];
+//             if (tracks[idx].data != NULL) {
+//                 uint64_t track_delta = tracks[idx].tick - tick;
+//                 if (track_delta < delta_tick) {
+//                     delta_tick = track_delta;
+//                 }
+//             }
+//         }
+
+//         free(active_tracks);
+
+//         tick += delta_tick;
+
+//         now = getTime100ns();
+//         temp = now - last_time;
+//         last_time = now;
+//         temp -= old;
+//         old = delta_tick * multiplier;
+//         delta += temp;
+
+//         temp = (delta > 0) ? (old - delta) : old;
+
+//         if (temp <= 0) {
+//             delta = (delta < (int64_t)max_drift) ? delta : (int64_t)max_drift;
+//         } else {
+//             delayExecution100Ns(temp);
+//         }
+//     }
+
+//     is_playing = false;
+//     pthread_join(logger_thread, NULL);
+// }

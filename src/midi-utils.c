@@ -3,21 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-uint32_t fntohl(const uint32_t nlong) {
-    return ((nlong & 0xFF000000) >> 24) |
-           ((nlong & 0x00FF0000) >> 8)  |
-           ((nlong & 0x0000FF00) << 8)  |
-           ((nlong & 0x000000FF) << 24);
-}
-
-uint16_t fntohs(const uint16_t nshort) {
-    return ((nshort & 0xFF00) >> 8) |
-           ((nshort & 0x00FF) << 8);
-}
-
-int64_t get100NanosecondsSinceEpoch() {
+int64_t getTime100ns() {
     struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
+    clock_gettime(CLOCK_MONOTONIC, &ts);
 
     return ((int64_t)ts.tv_sec * 10000000ULL) +
            ((int64_t)ts.tv_nsec / 100ULL);
@@ -28,6 +16,18 @@ void delayExecution100Ns(const int64_t delayIn100Ns) {
     req.tv_sec = delayIn100Ns / 10000000;
     req.tv_nsec = (delayIn100Ns % 10000000) * 100;
     nanosleep(&req, NULL);
+}
+
+uint32_t fntohl(const uint32_t nlong) {
+    return ((nlong & 0xFF000000) >> 24) |
+           ((nlong & 0x00FF0000) >> 8)  |
+           ((nlong & 0x0000FF00) << 8)  |
+           ((nlong & 0x000000FF) << 24);
+}
+
+uint16_t fntohs(const uint16_t nshort) {
+    return ((nshort & 0xFF00) >> 8) |
+           ((nshort & 0x00FF) << 8);
 }
 
 void* log_notes_per_second(void* arg) {

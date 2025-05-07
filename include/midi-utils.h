@@ -16,7 +16,7 @@ uint32_t fntohl(uint32_t nlong);
 uint16_t fntohs(uint16_t nshort);
 
 // Timing functions
-int64_t get100NanosecondsSinceEpoch();
+int64_t getTime100ns();
 void delayExecution100Ns(int64_t delayIn100Ns);
 
 // Logger thread function and structure

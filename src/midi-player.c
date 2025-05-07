@@ -1,8 +1,7 @@
-#include "midi-player.h"
-#include <string.h>
 #include <stdio.h>
 #include <pthread.h>
-#include <time.h>
+
+#include "midi-player.h"
 
 void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirectDataFunc SendDirectData, int min_velocity) {
     uint64_t tick = 0;
@@ -18,7 +17,7 @@ void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirect
     uint64_t note_on_count = 0;
     bool is_playing = true;
 
-    uint64_t now = get100NanosecondsSinceEpoch();
+    uint64_t now = getTime100ns();
     last_time = now;
 
     // Setup and start logger thread
@@ -102,7 +101,7 @@ void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirect
 
         tick += delta_tick;
 
-        now = get100NanosecondsSinceEpoch();
+        now = getTime100ns();
         temp = now - last_time;
         last_time = now;
         temp -= old;
