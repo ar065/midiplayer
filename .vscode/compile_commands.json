@@ -11,6 +11,16 @@
 },
 {
   "directory": "/home/ar06/Documents/GitHub/midiplayer",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-fvisibility=hidden", "-Iinclude", "-Ibuild/.gens/midi_player/linux/x86_64/release/platform/windows/idl", "-O3", "-march=native", "-funroll-loops", "-fomit-frame-pointer", "-DNDEBUG", "-o", "build/.objs/midi_player/linux/x86_64/release/src/alsa_output.c.o", "src/alsa_output.c"],
+  "file": "src/alsa_output.c"
+},
+{
+  "directory": "/home/ar06/Documents/GitHub/midiplayer",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-fvisibility=hidden", "-Iinclude", "-Ibuild/.gens/midi_player/linux/x86_64/release/platform/windows/idl", "-O3", "-march=native", "-funroll-loops", "-fomit-frame-pointer", "-DNDEBUG", "-o", "build/.objs/midi_player/linux/x86_64/release/src/arg_parser.c.o", "src/arg_parser.c"],
+  "file": "src/arg_parser.c"
+},
+{
+  "directory": "/home/ar06/Documents/GitHub/midiplayer",
   "arguments": ["/usr/bin/gcc", "-c", "-m64", "-fvisibility=hidden", "-Iinclude", "-Ibuild/.gens/midi_player/linux/x86_64/release/platform/windows/idl", "-O3", "-march=native", "-funroll-loops", "-fomit-frame-pointer", "-DNDEBUG", "-o", "build/.objs/midi_player/linux/x86_64/release/src/main.c.o", "src/main.c"],
   "file": "src/main.c"
 },
