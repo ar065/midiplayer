@@ -40,7 +40,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    printf("Playing MIDI file: %s\n", opts.filename);
+    printf("mplayer: Playing MIDI file: %s\n", opts.filename);
     play_midi(tracks, track_count, time_div, SendDirectData, opts.min_velocity);
     alsa_shutdown();
 

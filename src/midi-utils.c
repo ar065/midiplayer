@@ -39,6 +39,8 @@ void* log_notes_per_second(void* arg) {
         struct timespec sleep_time = {1, 0}; // 1 second
         nanosleep(&sleep_time, NULL);
         printf("mplayer: Notes per second: %lu\n", *note_on_count);
+        fflush(stdout);
+
         *note_on_count = 0;
     }
 
