@@ -9,6 +9,7 @@ const client = new Client("wss://mppclone.com", process.env.MPPNET_TOKEN);
 // Connect to the server
 client.start();
 client.setChannel('✧𝓓𝓔𝓥 𝓡𝓸𝓸𝓶✧');
+// client.setChannel("Room999156882061");
 
 // Listen for chat messages
 client.on('a', msg => {
@@ -25,7 +26,7 @@ client.on('a', msg => {
 // const require = createRequire(import.meta.url);
 // const midiPlayer = require("../../build/linux/x86_64/release/midi_player.node");
 
-const file = '/run/media/ar06/74EAEFC8EAEF8528/Midis/A-1/Coldplay - Viva La Vida black final.mid';
+const file = '/run/media/ar06/74EAEFC8EAEF8528/Midis/AEIOU midis/midis/10nqf - tau2.5.9.mid';
 const minimumVelocity = 1; // Minimum velocity (0-127)
 
 import { Worker } from 'worker_threads';
