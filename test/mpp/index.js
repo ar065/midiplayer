@@ -21,8 +21,12 @@ client.on('a', msg => {
     }
 });
 
-const file = '/run/media/ar06/74EAEFC8EAEF8528/Midis/A-1/Medley of YTPMV Black Final fix.mid';
-const minimumVelocity = 10; // Minimum velocity (0-127)
+// import { createRequire } from "module";
+// const require = createRequire(import.meta.url);
+// const midiPlayer = require("../../build/linux/x86_64/release/midi_player.node");
+
+const file = '/run/media/ar06/74EAEFC8EAEF8528/Midis/A-1/Coldplay - Viva La Vida black final.mid';
+const minimumVelocity = 1; // Minimum velocity (0-127)
 
 import { Worker } from 'worker_threads';
 
@@ -34,7 +38,8 @@ const worker = new Worker('./midiWorker.js', {
 });
 
 worker.on('message', msg => {
-    midiDataCallback(msg.data);
+    const data = new Uint32Array(msg)[0];
+    midiDataCallback(data);
 });
 
 
@@ -73,3 +78,6 @@ function midiDataCallback(data) {
         client.stopNote(MIDI_KEY_NAMES[noteNumber - 9 + MIDI_TRANSPOSE]);
     }
 }
+
+// Play a MIDI file
+// midiPlayer.playMIDI(file, midiDataCallback, minimumVelocity); 

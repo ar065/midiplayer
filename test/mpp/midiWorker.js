@@ -6,7 +6,8 @@ const midiPlayer = require("../../build/linux/x86_64/release/midi_player.node");
 const { file, minimumVelocity } = workerData;
 
 function midiDataCallback(data) {
-  parentPort.postMessage({ data });
+    const buf = new Uint32Array([data]);
+    parentPort.postMessage(buf.buffer, [buf.buffer]); // transfer ownership
 }
 
 const val = midiPlayer.playMIDI(file, midiDataCallback, minimumVelocity);
