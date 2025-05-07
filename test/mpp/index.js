@@ -21,8 +21,8 @@ client.on('a', msg => {
     }
 });
 
-const file = '/run/media/ar06/74EAEFC8EAEF8528/Midis/A-1/Coldplay - Viva La Vida black final.mid';
-const minimumVelocity = 1; // Minimum velocity (0-127)
+const file = '/run/media/ar06/74EAEFC8EAEF8528/Midis/A-1/Medley of YTPMV Black Final fix.mid';
+const minimumVelocity = 10; // Minimum velocity (0-127)
 
 import { Worker } from 'worker_threads';
 
@@ -34,9 +34,9 @@ const worker = new Worker('./midiWorker.js', {
 });
 
 worker.on('message', msg => {
-    const data = new Uint32Array(msg)[0];
-    midiDataCallback(data);
+    midiDataCallback(msg.data);
 });
+
 
 let MIDI_TRANSPOSE = -12;
 let MIDI_KEY_NAMES = ["a-1", "as-1", "b-1"];
