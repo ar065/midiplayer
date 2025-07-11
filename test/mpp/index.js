@@ -8,8 +8,9 @@ const client = new Client("wss://mppclone.com", process.env.MPPNET_TOKEN);
 
 // Connect to the server
 client.start();
-client.setChannel('✧𝓓𝓔𝓥 𝓡𝓸𝓸𝓶✧');
-// client.setChannel("Room999156882061");
+// client.setChannel('✧𝓓𝓔𝓥 𝓡𝓸𝓸𝓶✧');
+// client.setChannel("Room369758172347");
+client.setChannel("cheez");
 
 // Listen for chat messages
 client.on('a', msg => {
@@ -20,29 +21,38 @@ client.on('a', msg => {
             message: "Pong!"
         }]);
     }
-});
-
-// import { createRequire } from "module";
-// const require = createRequire(import.meta.url);
-// const midiPlayer = require("../../build/linux/x86_64/release/midi_player.node");
-
-const file = '/run/media/ar06/74EAEFC8EAEF8528/Midis/AEIOU midis/midis/10nqf - tau2.5.9.mid';
-const minimumVelocity = 1; // Minimum velocity (0-127)
-
-import { Worker } from 'worker_threads';
-
-const worker = new Worker('./midiWorker.js', {
-    workerData: {
-        file,
-        minimumVelocity
+    if (msg.a == "!overdrive") {
+        client.sendArray([{
+            m: "a",
+            message: "ok 💥"
+        }]);
     }
 });
 
-worker.on('message', msg => {
-    const data = new Uint32Array(msg)[0];
-    midiDataCallback(data);
-});
+let hue = 0;
 
+setInterval(() => {
+    hue = (hue + 1) % 360; // Cycle hue from 0 to 359
+    const hex = hslToHex(hue, 100, 50);
+    client.setColor(hex);
+}, 1000 / 60);
+
+function hslToHex(h, s, l) {
+    s /= 100;
+    l /= 100;
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n =>
+        Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))));
+    return "#" + [f(0), f(8), f(4)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const midiPlayer = require("../../build/linux/x86_64/release/midi_player.node");
+
+const file = '/run/media/ar06/74EAEFC8EAEF8528/Midis/Folder1/DISCO_sb_arrange.mid';
+const minimumVelocity = 0; // Minimum velocity (0-127)
 
 let MIDI_TRANSPOSE = -12;
 let MIDI_KEY_NAMES = ["a-1", "as-1", "b-1"];
@@ -81,4 +91,4 @@ function midiDataCallback(data) {
 }
 
 // Play a MIDI file
-// midiPlayer.playMIDI(file, midiDataCallback, minimumVelocity); 
+midiPlayer.playMIDI(file, midiDataCallback, minimumVelocity); 

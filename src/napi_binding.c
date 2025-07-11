@@ -3,149 +3,293 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "midi.h"
 #include "midi-player.h"
 
-// Define a structure to wrap our JS callback
-typedef struct {
-    napi_ref callback_ref;
-    napi_env env;
-} SendDirectDataContext;
+#ifdef ENABLE_MIDI_DEBUG
+  #define LOG(...) LOG(stderr, __VA_ARGS__)
+#else
+  #define LOG(...) (void)0
+#endif
 
-// Global context to maintain the callback reference
-static SendDirectDataContext callback_context = {NULL, NULL};
+// —————————————————————————————————————————————————————————————————
+// Globals
+// —————————————————————————————————————————————————————————————————
 
-// Forward declaration of the function that will be called from C to JS
-void NapiSendDirectData(uint32_t data);
+// Our single threadsafe function handle
+static napi_threadsafe_function g_tsfn = NULL;
 
-// Method to free TrackData resources
-void free_tracks(TrackData* tracks, int track_count) {
-    if (tracks) {
-        for (int i = 0; i < track_count; i++) {
-            free_track_data(&tracks[i]);
-        }
-        free(tracks);
+// Worker arguments
+typedef struct
+{
+    TrackData *tracks;
+    int track_count;
+    uint16_t time_div;
+    uint8_t min_velocity;
+} WorkerArgs;
+
+// —————————————————————————————————————————————————————————————————
+// Utility: free up TrackData[]
+// —————————————————————————————————————————————————————————————————
+
+static void free_tracks(TrackData *tracks, int track_count)
+{
+    if (!tracks)
+        return;
+    for (int i = 0; i < track_count; i++)
+    {
+        free_track_data(&tracks[i]);
     }
+    free(tracks);
 }
 
-// Method to play a MIDI file
-napi_value PlayMIDI(napi_env env, napi_callback_info info) {
-    size_t argc = 3; // Expected arguments: file path, callback function, min velocity
-    napi_value args[3];
-    napi_value this_arg;
-    napi_status status;
-    
-    // Get the arguments passed to the function
-    status = napi_get_cb_info(env, info, &argc, args, &this_arg, NULL);
-    if (status != napi_ok || argc < 2) {
-        napi_throw_error(env, NULL, "Invalid arguments. Expected: (filePath, callback[, minVelocity])");
-        return NULL;
-    }
-    
-    // Extract the file path
-    char filepath[256];
-    size_t filepath_len;
-    status = napi_get_value_string_utf8(env, args[0], filepath, sizeof(filepath), &filepath_len);
-    if (status != napi_ok) {
-        napi_throw_error(env, NULL, "Invalid file path");
-        return NULL;
-    }
-    
-    // Extract the callback function
-    napi_valuetype valuetype;
-    status = napi_typeof(env, args[1], &valuetype);
-    if (status != napi_ok || valuetype != napi_function) {
-        napi_throw_error(env, NULL, "Invalid callback function");
-        return NULL;
-    }
-    
-    // Store the callback reference
-    if (callback_context.callback_ref != NULL) {
-        napi_delete_reference(env, callback_context.callback_ref);
-    }
-    status = napi_create_reference(env, args[1], 1, &callback_context.callback_ref);
-    callback_context.env = env;
-    
-    // Extract min_velocity (optional argument)
-    uint8_t min_velocity = 0; // Default value
-    if (argc >= 3) {
-        uint32_t temp_velocity;
-        status = napi_get_value_uint32(env, args[2], &temp_velocity);
-        if (status != napi_ok) {
-            napi_throw_error(env, NULL, "Invalid min_velocity value");
-            return NULL;
-        }
-        // Convert uint32_t to uint8_t, clamping the value to 0-127 for MIDI
-        min_velocity = (temp_velocity > 127) ? 127 : (uint8_t)temp_velocity;
-    }
-    
-    // Load the MIDI file
-    uint16_t time_div = 0;
-    int track_count = 0;
-    TrackData* tracks = load_midi_file(filepath, &time_div, &track_count);
-    if (!tracks) {
-        napi_throw_error(env, NULL, "Failed to load MIDI file");
-        return NULL;
-    }
-    
-    // Play the MIDI file
-    play_midi(tracks, track_count, time_div, NapiSendDirectData, min_velocity);
-    
-    // Free the track data after playing
-    free_tracks(tracks, track_count);
-    
-    napi_value result;
-    napi_get_undefined(env, &result);
-    return result;
-}
-
-// Function that will be called from C to JS
-void NapiSendDirectData(uint32_t data) {
-    if (callback_context.callback_ref == NULL || callback_context.env == NULL) {
+// —————————————————————————————————————————————————————————————————
+// This will run ON the JS thread when an event is dequeued.
+// —————————————————————————————————————————————————————————————————
+static void CallJs(napi_env env,
+                   napi_value js_cb,
+                   void * /*context*/,
+                   void *data)
+{
+    if (!env || !js_cb)
+    {
+        LOG(stderr, "[CallJs] invalid env or js_cb\n");
         return;
     }
-    
-    napi_env env = callback_context.env;
-    napi_value callback;
+    if (!data)
+    {
+        LOG(stderr, "[CallJs] no data to send\n");
+        return;
+    }
+
+    uint32_t value = *(uint32_t *)data;
+    free(data);
+
+    LOG(stderr, "[CallJs] invoking JS callback with %u\n", value);
+
+    // 1) Get the global object to use as 'this'
     napi_value global;
-    napi_value args[1];
-    napi_value result;
-    
-    // Get the global object
-    napi_get_global(env, &global);
-    
-    // Get the JavaScript callback function from the reference
-    napi_get_reference_value(env, callback_context.callback_ref, &callback);
-    
-    // Create the argument to pass to the callback (the data value)
-    napi_create_uint32(env, data, &args[0]);
-    
-    // Call the JavaScript function
-    napi_call_function(env, global, callback, 1, args, &result);
+    napi_status st = napi_get_global(env, &global);
+    if (st != napi_ok)
+    {
+        LOG(stderr, "[CallJs] napi_get_global failed\n");
+        return;
+    }
+
+    // 2) Prepare the argument
+    napi_value argv;
+    st = napi_create_uint32(env, value, &argv);
+    if (st != napi_ok)
+    {
+        LOG(stderr, "[CallJs] napi_create_uint32 failed\n");
+        return;
+    }
+
+    // 3) Call the JS function with 'global' as the receiver
+    st = napi_call_function(env, global, js_cb, 1, &argv, NULL);
+    if (st != napi_ok)
+    {
+        LOG(stderr, "[CallJs] napi_call_function failed with code %d\n", st);
+    }
 }
 
-// Initialize the module
-napi_value Init(napi_env env, napi_value exports) {
-    napi_status status;
-    napi_value play_midi_fn;
-    
-    // Create the PlayMIDI function
-    status = napi_create_function(env, NULL, 0, PlayMIDI, NULL, &play_midi_fn);
-    if (status != napi_ok) {
-        napi_throw_error(env, NULL, "Failed to create function");
+// —————————————————————————————————————————————————————————————————
+// This is passed into play_midi.  It runs on the MIDI thread.
+// —————————————————————————————————————————————————————————————————
+
+void ThreadSendDirectData(uint32_t data)
+{
+    if (!g_tsfn)
+    {
+        LOG(stderr, "[ThreadSend] no TSFN (was it created?)\n");
+        return;
+    }
+
+    LOG(stderr, "[ThreadSend] queueing %u\n", data);
+
+    uint32_t *boxed = malloc(sizeof(uint32_t));
+    if (!boxed)
+    {
+        LOG(stderr, "[ThreadSend] malloc failed\n");
+        return;
+    }
+    *boxed = data;
+
+    napi_status st = napi_call_threadsafe_function(
+        g_tsfn,
+        boxed,
+        napi_tsfn_nonblocking);
+    if (st != napi_ok)
+    {
+        LOG(stderr, "[ThreadSend] napi_call_threadsafe_function failed\n");
+        free(boxed);
+    }
+}
+
+// —————————————————————————————————————————————————————————————————
+// Worker entry point: calls your blocking play_midi.
+// —————————————————————————————————————————————————————————————————
+
+void *PlayMidiWorker(void *arg)
+{
+    WorkerArgs *w = (WorkerArgs *)arg;
+
+    LOG(stderr, "[Worker] starting play_midi()\n");
+    play_midi(
+        w->tracks,
+        w->track_count,
+        w->time_div,
+        ThreadSendDirectData,
+        w->min_velocity);
+    LOG(stderr, "[Worker] play_midi() returned\n");
+
+    free_tracks(w->tracks, w->track_count);
+    free(w);
+
+    // let JS side know we're done with the TSFN
+    napi_status st = napi_release_threadsafe_function(
+        g_tsfn,
+        napi_tsfn_release);
+    if (st != napi_ok)
+    {
+        LOG(stderr, "[Worker] napi_release_threadsafe_function failed\n");
+    }
+    else
+    {
+        LOG(stderr, "[Worker] TSFN released\n");
+    }
+    g_tsfn = NULL;
+    return NULL;
+}
+
+// —————————————————————————————————————————————————————————————————
+// N‑API binding for playMIDI(filePath, callback, [minVelocity])
+// —————————————————————————————————————————————————————————————————
+
+napi_value PlayMIDI(napi_env env, napi_callback_info info)
+{
+    size_t argc = 3;
+    napi_value argv[3];
+    napi_status st;
+
+    st = napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
+    if (st != napi_ok || argc < 2)
+    {
+        napi_throw_error(env, NULL,
+                         "Expected (filePath: string, callback: function, [minVelocity: number])");
         return NULL;
     }
-    
-    // Add the function to exports
-    status = napi_set_named_property(env, exports, "playMIDI", play_midi_fn);
-    if (status != napi_ok) {
-        napi_throw_error(env, NULL, "Failed to set exports");
+
+    // — extract file path
+    char filepath[512];
+    size_t path_len;
+    st = napi_get_value_string_utf8(env, argv[0],
+                                    filepath, sizeof(filepath),
+                                    &path_len);
+    if (st != napi_ok)
+    {
+        napi_throw_error(env, NULL, "Invalid filePath");
         return NULL;
     }
-    
+
+    // — extract min velocity
+    uint8_t min_velocity = 0;
+    if (argc >= 3)
+    {
+        uint32_t tmp;
+        st = napi_get_value_uint32(env, argv[2], &tmp);
+        if (st == napi_ok)
+        {
+            min_velocity = tmp > 127 ? 127 : (uint8_t)tmp;
+        }
+    }
+
+    // — create TSFN
+    napi_value resource_name;
+    st = napi_create_string_utf8(env, "midi_callback",
+                                 NAPI_AUTO_LENGTH,
+                                 &resource_name);
+    if (st != napi_ok)
+    {
+        napi_throw_error(env, NULL, "Failed to create resource name");
+        return NULL;
+    }
+
+    st = napi_create_threadsafe_function(
+        env,
+        argv[1],       // JS callback
+        NULL,          // async_resource
+        resource_name, // resource name
+        0,             // max queue size (0 = unlimited)
+        1,             // initial thread count
+        NULL,          // thread finalize data
+        NULL,          // thread finalize cb
+        NULL,          // context for CallJs
+        CallJs,        // call_js_cb
+        &g_tsfn);
+    if (st != napi_ok)
+    {
+        napi_throw_error(env, NULL, "Failed to create TSFN");
+        return NULL;
+    }
+
+    // MUST acquire it before using
+    st = napi_acquire_threadsafe_function(g_tsfn);
+    if (st != napi_ok)
+    {
+        napi_throw_error(env, NULL, "Failed to acquire TSFN");
+        return NULL;
+    }
+
+    // — load the MIDI file
+    uint16_t time_div;
+    int track_count;
+    TrackData *tracks = load_midi_file(filepath, &time_div, &track_count);
+    if (!tracks)
+    {
+        napi_throw_error(env, NULL, "Failed to load MIDI file");
+        napi_release_threadsafe_function(g_tsfn, napi_tsfn_release);
+        g_tsfn = NULL;
+        return NULL;
+    }
+
+    // — spawn the worker
+    WorkerArgs *w = malloc(sizeof(*w));
+    w->tracks = tracks;
+    w->track_count = track_count;
+    w->time_div = time_div;
+    w->min_velocity = min_velocity;
+
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, PlayMidiWorker, w) != 0)
+    {
+        napi_throw_error(env, NULL, "Failed to create worker thread");
+        free_tracks(tracks, track_count);
+        free(w);
+        napi_release_threadsafe_function(g_tsfn, napi_tsfn_release);
+        g_tsfn = NULL;
+        return NULL;
+    }
+    pthread_detach(tid);
+
+    // return undefined
+    napi_value undef;
+    napi_get_undefined(env, &undef);
+    return undef;
+}
+
+// —————————————————————————————————————————————————————————————————
+// Module init
+// —————————————————————————————————————————————————————————————————
+
+napi_value Init(napi_env env, napi_value exports)
+{
+    napi_value fn;
+    napi_create_function(env, NULL, 0, PlayMIDI, NULL, &fn);
+    napi_set_named_property(env, exports, "playMIDI", fn);
     return exports;
 }
 
-// Register the module
 NAPI_MODULE(NODE_GYP_MODULE_NAME, Init)

@@ -11,6 +11,7 @@
         "cstdint": "c",
         "kdmapi.h": "c",
         "stdio.h": "c",
-        "*.buffered": "c"
+        "*.buffered": "c",
+        "stats_logger.h": "c"
     }
 }

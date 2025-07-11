@@ -2,6 +2,7 @@
 #include <pthread.h>
 
 #include "midi-player.h"
+#include "stats_logger.h"
 
 void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirectDataFunc SendDirectData, int min_velocity) {
     uint64_t tick = 0;
@@ -21,12 +22,11 @@ void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirect
     last_time = now;
 
     // Setup and start logger thread
-    pthread_t logger_thread;
-    LoggerArgs* logger_args = malloc(sizeof(LoggerArgs));
-    logger_args->is_playing = &is_playing;
-    logger_args->note_on_count = &note_on_count;
+    StatsLogger*   logger       = stats_logger_create(144);
+    pthread_t      logger_thread;
+    FrameLoggerArgs logger_args = { .lg = logger, .is_playing = &is_playing };
 
-    pthread_create(&logger_thread, NULL, log_notes_per_second, logger_args);
+    pthread_create(&logger_thread, NULL, log_notes_per_second, &logger_args);
 
     bool has_active_tracks = true;
 
@@ -50,7 +50,8 @@ void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirect
                             // Check if it's a note-on message
                             if (msg_type >= 0x90 && msg_type <= 0x9F) {
                                 uint8_t velocity = (message >> 16) & 0xFF;
-                                note_on_count++;
+                                // note_on_count++;
+                                stats_logger_increment(logger);
 
                                 if (velocity > min_velocity) {
                                     SendDirectData(message);
@@ -119,4 +120,5 @@ void play_midi(TrackData* tracks, int track_count, uint16_t time_div, SendDirect
 
     is_playing = false;
     pthread_join(logger_thread, NULL);
+    stats_logger_destroy(logger);
 }

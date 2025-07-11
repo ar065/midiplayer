@@ -1,4 +1,6 @@
 #include "midi-utils.h"
+#include "stats_logger.h"
+
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,20 +32,27 @@ uint16_t fntohs(const uint16_t nshort) {
            ((nshort & 0x00FF) << 8);
 }
 
-void* log_notes_per_second(void* arg) {
-    LoggerArgs* args = (LoggerArgs*)arg;
-    bool* is_playing = args->is_playing;
-    uint64_t* note_on_count = args->note_on_count;
+void* log_notes_per_second(void* _args) {
+    FrameLoggerArgs* args = (FrameLoggerArgs*)_args;
+    StatsLogger* lg       = args->lg;
+    bool* is_playing      = args->is_playing;
+
+    // sleep interval = 1/fps seconds
+    struct timespec ts;
+    ts.tv_sec = 0;
+    ts.tv_nsec = (long)(1e9 / lg->fps);
 
     while (*is_playing) {
-        struct timespec sleep_time = {1, 0}; // 1 second
-        nanosleep(&sleep_time, NULL);
-        printf("mplayer: Notes per second: %lu\n", *note_on_count);
-        fflush(stdout);
+        nanosleep(&ts, NULL);
 
-        *note_on_count = 0;
+        // advance window
+        stats_logger_next_frame(lg);
+
+        // print the current EPS
+        uint32_t eps = stats_logger_get_eps(lg);
+        printf("mplayer: Notes per second (sliding): %u\n", eps);
+        fflush(stdout);
     }
 
-    free(args);
     return NULL;
 }
