@@ -12,6 +12,10 @@
         "kdmapi.h": "c",
         "stdio.h": "c",
         "*.buffered": "c",
-        "stats_logger.h": "c"
+        "stats_logger.h": "c",
+        "stdlib.h": "c",
+        "stdint.h": "c",
+        "compare": "c",
+        "string.h": "c"
     }
 }
